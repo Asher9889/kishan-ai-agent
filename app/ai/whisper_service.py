@@ -14,15 +14,15 @@ import numpy as np
 
 class WhisperService:
     def __init__(self) -> None:
-        logger.info(
-            "Loading Whisper model",
-            model=settings.WHISPER_MODEL,
-        )
+        # logger.info(
+        #     "Loading Whisper model",
+        #     model=settings.WHISPER_MODEL,
+        # )
 
         self.model = WhisperModel(
             settings.WHISPER_MODEL,
-            device="cpu",
-            compute_type="int8",
+            device="cuda", # cpu for cpu
+            compute_type="float16", # int8 for cpu
             local_files_only=False
         )
 
@@ -101,4 +101,15 @@ class WhisperService:
 
 
 # Global singleton instance
-whisper_service = WhisperService()
+# whisper_service = WhisperService()
+
+_whisper_service: WhisperService | None = None
+
+
+def get_whisper_service() -> WhisperService:
+    global _whisper_service
+
+    if _whisper_service is None:
+        _whisper_service = WhisperService()
+
+    return _whisper_service

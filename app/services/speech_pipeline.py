@@ -10,7 +10,7 @@ from fastapi import (
 )
 
 from app.ai.whisper_service import (
-    whisper_service,
+    get_whisper_service
 )
 
 from app.core.logger import (
@@ -24,10 +24,7 @@ from app.utils.file_utils import (
 
 class SpeechPipeline:
 
-    async def process(
-        self,
-        audio_bytes: bytes,
-    ) -> dict[str, str | float]:
+    async def process(self, audio_bytes: bytes) -> dict[str, str | float]:
 
         temp_path: Path | None = None
 
@@ -90,7 +87,7 @@ class SpeechPipeline:
             # =================================
 
             result = (
-                whisper_service.transcribe(
+                get_whisper_service().transcribe(
                     temp_path
                 )
             )

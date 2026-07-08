@@ -1,8 +1,12 @@
 import asyncio
-from app.ai.whisper_service import whisper_service
+# from app.ai.whisper_service import whisper_service
+# from app.ai.whisper_service import get_whisper_service
 from livekit import rtc
 from array import array
 import numpy as np
+import httpx
+
+
 
 class SpeechPipeline:
 
@@ -12,41 +16,54 @@ class SpeechPipeline:
         # self.frames: list[rtc.AudioFrame] = []
         self.running = False
         self.pcm_buffer = array("h") #"h" means signed 16-bit integers,
+        self.client = httpx.AsyncClient(
+            base_url="http://localhost:8000",
+            timeout=30.0,
+        )
+        # self.whisper = get_whisper_service()
         
 
     async def start(self):
-        print("Speech Pipeline Started")
+        print("SpeechPipeline started", id(self))
+        # print("Speech Pipeline Started")
         self.running = True
         while self.running:
 
             # Wait until AudioReader puts a frame
             frame = await self.queue.get()
 
-            # self.frames.append(frame)
             self.pcm_buffer.extend(frame.data)
-            # print(type(frame.data))
-            # print(frame.data.format)
-            # print(frame.data.itemsize)
-            # print(frame.data.shape)
-            # print(frame.data.nbytes)
 
             # Approximately 1 second
             if len(self.pcm_buffer) >= frame.sample_rate:
 
                 # Hand the current chunk to Whisper
+                
                 pcm_chunk = self.pcm_buffer
+                self.pcm_buffer = array("h")  # replace the buffer with a new empty array for the next chunk
+                
+                print(len(pcm_chunk), id(pcm_chunk), id(self.pcm_buffer))
 
                 # Immediately start collecting the next chunk
-                self.pcm_buffer = array("h")
+                # self.pcm_buffer = array("h")
 
                 print(f"Collected {len(pcm_chunk)} PCM samples")
-
-                result = whisper_service.transcribe_pcm(
-                    pcm_chunk,
-                    sample_rate=frame.sample_rate,
+                
+                response = await self.client.post(
+                    "/transcribe-pcm",
+                    content=pcm_chunk.tobytes(),
+                    headers={
+                        "Content-Type": "application/octet-stream",
+                        "X-Sample-Rate": str(frame.sample_rate),
+                    },
                 )
 
-                print(result)
+                # result = self.whisper.transcribe_pcm(
+                #     pcm_chunk,
+                #     sample_rate=frame.sample_rate,
+                # )
+
+                print(response)
 
 
     async def stop(self):
