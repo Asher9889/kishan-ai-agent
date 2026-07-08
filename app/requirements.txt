@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+faster-whisper
+python-multipart
+pydantic-settings
+structlog
+aiofiles
+python-dotenv
+groq==0.31.0
+sentence-transformers==5.1.0
+chromadb==1.0.9
+sqlalchemy==2.0.41
+pyodbc==5.2.0
