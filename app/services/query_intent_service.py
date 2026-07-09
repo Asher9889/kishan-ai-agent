@@ -139,7 +139,9 @@ Category:
 
             response = (
                 llm_service.generate(
-                    prompt
+                    messages=[
+                        {"role": "user", "content": prompt},
+                    ],
                 )
             )
 

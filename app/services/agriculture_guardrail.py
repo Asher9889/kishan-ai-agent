@@ -52,8 +52,10 @@ Return JSON only.
 """
 
             response = llm_service.generate(
-                system_prompt=cls.SYSTEM_PROMPT,
-                prompt=prompt,
+                messages=[
+                    {"role": "system", "content": cls.SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
                 temperature=0
             )
 
