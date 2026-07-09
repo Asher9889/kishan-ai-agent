@@ -26,7 +26,7 @@ class ConversationPipeline:
         print("Transcript:", transcript)
 
         # Next step
-        answer = await self.ask_llm(transcript)
+        answer = await self.ask_llm(transcript, self.conversation_id)
         print("LLM Answer:", answer)
         # await self.speak(answer)
 
@@ -62,13 +62,14 @@ class ConversationPipeline:
         return transcript
 
 
-    async def ask_llm(self, prompt: str) -> str:
+    async def ask_llm(self, prompt: str, conversation_id: str) -> str:
+        print(f"Sending prompt to LLM: {prompt} (conversation_id: {conversation_id})")
         response = await self.client.post("/v3/ask",
             json={
                 "message": prompt,
                 "role": "user",
-                "thread_id": self.conversation_id,
-                "conversation_id": self.conversation_id,
+                "thread_id": conversation_id,
+                # "conversation_id": conversation_id,
             },
         )
 

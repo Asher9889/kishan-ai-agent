@@ -16,7 +16,7 @@ class VoiceSession:
         self.audio_queue = asyncio.Queue()
         self.audio_readers: dict[str, AudioReader] = {}
         self.reader_tasks: set[asyncio.Task] = set()
-        self.conversation_pipeline = ConversationPipeline()
+        self.conversation_pipeline = ConversationPipeline(self.ctx.room.name)
         self.speech_pipeline = SpeechPipeline(queue=self.audio_queue, conversation_pipeline=self.conversation_pipeline)
 
     async def start(self) -> None:
