@@ -12,11 +12,6 @@ class ConversationPipeline:
             base_url="http://localhost:8000",
             timeout=30.0,
         )
-        self.client2 = httpx.AsyncClient(
-            base_url="http://kishananubhav.mssplonline.in",
-            timeout=30.0,
-        )
-
 
         self.conversation_id: str | None = chat_id
 
@@ -27,7 +22,6 @@ class ConversationPipeline:
             sample_rate=sample_rate,
         )
         
-        print("Transcript received:", transcript)
         if not transcript:
             return
 
@@ -52,16 +46,14 @@ class ConversationPipeline:
         response = await self.client.post("/transcribe-pcm",
             content=pcm.tobytes(),
             headers={
-                # "Content-Type": "application/json",
+                "Content-Type": "application/json",
                 "X-Sample-Rate": str(sample_rate),
             },
         )
-
+        
         response.raise_for_status()
 
         payload = response.json()
-
-        print("Whisper Response:", payload)
 
         transcript = (
             payload
@@ -84,16 +76,17 @@ class ConversationPipeline:
 
         full_answer = ""
 
-        async with self.client.post("POST", "/v3/ask",
+        async with self.client.stream("POST", "/v3/ask",
             json={
                 "thread_id": conversation_id,
                 "text": prompt,
             },
-            # headers={
-            #     "Content-Type": "application/json",
-            # },
+            headers={
+                "Content-Type": "application/json",
+            },
         ) as response:
-
+            
+            print("LLM Response Status:", response)
             response.raise_for_status()
 
             async for line in response.aiter_lines():

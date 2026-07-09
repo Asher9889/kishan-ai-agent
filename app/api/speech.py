@@ -93,8 +93,6 @@ async def transcribe_pcm(request: Request) -> ApiResponse:
             sample_rate=sample_rate,
         )
         
-        print(f"PCM Transcription Result: {result}")
-
         return ApiResponse(
             success=True,
             message="PCM transcription completed successfully",
