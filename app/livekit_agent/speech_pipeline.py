@@ -8,26 +8,35 @@ import httpx
 from scipy.signal import resample_poly
 
 
+from app.livekit_agent.conversation_pipeline import ConversationPipeline
 from app.livekit_agent.vad import SileroVAD
 
 
 
 class SpeechPipeline:
 
-    def __init__(self, queue: asyncio.Queue[rtc.AudioFrame]):
+    def __init__(self, queue: asyncio.Queue[rtc.AudioFrame], conversation_pipeline: ConversationPipeline):
         self.queue = queue
+        self.conversation_pipeline = conversation_pipeline
         # Stores AudioFrames temporarily
         # self.frames: list[rtc.AudioFrame] = []
         self.running = False
-        self.pcm_buffer = array("h") #"h" means signed 16-bit integers,
         
-        
-        self.vad_buffer = array("h")          # Sliding analysis window (~300 ms)
-        self.speech_buffer = array("h")  
+        self.vad_buffer = array("h")   # For Silero Sliding analysis window 
+        self.pre_roll_buffer = array("h")  # Last 300 ms
+        self.speech_buffer = array("h")  # Whole utterance
         
         self.is_speaking = False
         self.silence_frames = 0
         self.vad = SileroVAD()
+        
+        self.vad_window_ms = 300
+        self.silence_timeout_ms = 2000  # 2 seconds of silence to consider speech ended
+        # 10 ms per LiveKit frame
+        self.frame_duration_ms = 10
+        
+        self.silence_frames = 0
+
         
         self.client = httpx.AsyncClient(
             base_url="http://localhost:8000",
@@ -59,55 +68,197 @@ class SpeechPipeline:
         """
     async def start(self):
         print("SpeechPipeline started", id(self))
-        # print("Speech Pipeline Started")
         self.running = True
-        
+
         while self.running:
+            """
+            at every iternation we get 10ms data more.
+            for 48000 hz 10 ms = 480 samples
+            for 16000 hz 10 ms = 160 samples
+            """
 
-            # Wait until AudioReader puts a frame
+            # Wait for next 10 ms frame
             frame = await self.queue.get()
-            
-            vad_samples = int(frame.sample_rate * 0.3)
-            
-            self.vad_buffer.extend(frame.data)
-            self.pcm_buffer.extend(frame.data)
 
-            # Approximately 1 second
-            if len(self.vad_buffer) < vad_samples:
+            # Buffer sizes
+            vad_samples = int(frame.sample_rate * 0.3)       # 300 ms
+            pre_roll_samples = int(frame.sample_rate * 0.3)  # 300 ms
+
+            # Update buffers
+            self.vad_buffer.extend(frame.data)  # adding more 10ms sample which is 480 sample
+            self.pre_roll_buffer.extend(frame.data) # adding more 10ms sample which is 480 sample
+
+            # Keep only the latest 300 ms in pre-roll
+            if len(self.pre_roll_buffer) > pre_roll_samples:
+                del self.pre_roll_buffer[:-pre_roll_samples] # delete first 10ms sample
+
+            # Wait until we have enough audio for VAD
+            if len(self.vad_buffer) < vad_samples: # it means we do not have 300 ms sample to start pipeline
                 continue
-            
+
+            # Prepare audio for Silero
             audio = np.array(
                 self.vad_buffer,
                 dtype=np.float32,
             )
-            
+
             audio /= 32768.0
+
             audio = resample_poly(
                 audio,
                 up=16000,
-                down=48000,
+                down=frame.sample_rate,
             )
-            
-            # print("Audio length send to vad",len(audio))
-            
-            # print("dtype:", audio.dtype)
-            # print("shape:", audio.shape)
-            # print("min:", audio.min())
-            # print("max:", audio.max())
-            # print("mean abs:", np.abs(audio).mean())
-            # print("rms:", np.sqrt(np.mean(audio ** 2)))
-            
+
+            # Run VAD
             speech_detected = self.vad.is_speech(
                 audio,
                 sample_rate=16000,
             )
-            
-            # keep only latest 300 ms
+
+            # Keep only the latest 300 ms in VAD buffer
             if len(self.vad_buffer) > vad_samples:
                 del self.vad_buffer[:-vad_samples]
 
+            # Speech detected
+            if speech_detected:
+
+                if not self.is_speaking:
+
+                    print("Speech started")
+
+                    self.is_speaking = True
+                    self.silence_frames = 0
+
+                    # Start the utterance with the previous 300 ms
+                    self.speech_buffer = array("h")
+                    self.speech_buffer.extend(self.pre_roll_buffer)
+
+                # Add current frame
+                self.speech_buffer.extend(frame.data)
+
+                # Reset silence counter
+                self.silence_frames = 0
+
+            # ==========================================================
+            # Silence detected
+            # ==========================================================
+            else:
+
+                if self.is_speaking:
+
+                    # Keep trailing silence
+                    self.speech_buffer.extend(frame.data)
+
+                    self.silence_frames += 1
+
+                    if self.silence_frames >= (self.silence_timeout_ms // self.frame_duration_ms):
+
+                        print("Speech ended")
+
+                        pcm_chunk = self.speech_buffer
+
+                        # Reset state for next utterance
+                        self.speech_buffer = array("h")
+                        self.is_speaking = False
+                        self.silence_frames = 0
+
+                        print(
+                            f"Sending {len(pcm_chunk)} PCM samples to Whisper"
+                        )
+
+                        # response = await self.client.post(
+                        #     "/transcribe-pcm",
+                        #     content=pcm_chunk.tobytes(),
+                        #     headers={
+                        #         "Content-Type": "application/octet-stream",
+                        #         "X-Sample-Rate": str(frame.sample_rate),
+                        #     },
+                        # )
+
+                        # print(response)
+                        await self.conversation_pipeline.process_pcm(pcm_chunk, frame.sample_rate)
+    # async def start(self):
+    #     print("SpeechPipeline started", id(self))
+    #     # print("Speech Pipeline Started")
+    #     self.running = True
+        
+    #     while self.running:
+
+    #         # Wait until AudioReader puts a frame
+    #         frame = await self.queue.get()
             
-            print(speech_detected)
+    #         vad_samples = int(frame.sample_rate * 0.3)
+            
+    #         self.vad_buffer.extend(frame.data)
+    #         self.pre_roll_buffer.extend(frame.data)
+    #         pre_roll_samples = int(frame.sample_rate * 0.3)
+            
+    #         if len(self.pre_roll_buffer) > pre_roll_samples:
+    #             del self.pre_roll_buffer[:-pre_roll_samples]
+
+    #         # Approximately 1 second
+    #         if len(self.vad_buffer) < vad_samples:
+    #             continue
+            
+    #         audio = np.array(
+    #             self.vad_buffer,
+    #             dtype=np.float32,
+    #         )
+            
+    #         audio /= 32768.0
+    #         audio = resample_poly(
+    #             audio,
+    #             up=16000,
+    #             down=48000,
+    #         )
+
+    #         speech_detected = self.vad.is_speech(
+    #             audio,
+    #             sample_rate=16000,
+    #         )
+            
+    #         # keep only latest 300 ms
+    #         if len(self.vad_buffer) > vad_samples:
+    #             del self.vad_buffer[:-vad_samples]
+
+            
+    #         print(speech_detected)
+    #         if speech_detected:
+    #             if not self.is_speaking:
+    #                 print("Speech started")
+    #                 self.is_speaking = True
+
+    #             self.silence_frames = 0
+
+    #             # Always keep the current frame
+    #             self.speech_buffer.extend(frame.data)
+    #         else:
+    #             if self.is_speaking:
+    #                 # Keep trailing silence
+    #                 self.speech_buffer.extend(frame.data)
+
+    #                 self.silence_frames += 1
+
+    #                 if self.silence_frames >= (self.silence_timeout_ms // self.frame_duration_ms):
+    #                     print("Speech ended")
+    #                     pcm_chunk = self.speech_buffer
+    #                     self.speech_buffer = array("h")
+    #                     self.is_speaking = False
+    #                     self.silence_frames = 0
+
+    #                     response = await self.client.post(
+    #                         "/transcribe-pcm",
+    #                         content=pcm_chunk.tobytes(),
+    #                         headers={
+    #                             "Content-Type": "application/octet-stream",
+    #                             "X-Sample-Rate": str(frame.sample_rate),
+    #                         },
+    #                     )
+
+    #                     print(await response.json())
+    
+
 
                 # Hand the current chunk to Whisper
                 
@@ -142,3 +293,7 @@ class SpeechPipeline:
         self.running = False
         self.pcm_buffer = array("h")
         print("Speech Pipeline Stopped")
+        
+        
+        
+        

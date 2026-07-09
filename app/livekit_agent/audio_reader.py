@@ -46,8 +46,8 @@ class AudioReader:
                 # print(np.abs(pcm).mean())
                 
                 
-                print(type(event.frame))
-                print(event.frame)
+                # print(type(event.frame))
+                # print(event.frame)
                 await self.queue.put(event.frame) 
                 """
                 each frame contains:

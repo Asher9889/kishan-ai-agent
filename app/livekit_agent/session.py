@@ -1,5 +1,6 @@
 import asyncio
 
+from app.livekit_agent.conversation_pipeline import ConversationPipeline
 from app.livekit_agent.speech_pipeline import SpeechPipeline
 from livekit import rtc
 from livekit.agents import AutoSubscribe, JobContext
@@ -15,7 +16,8 @@ class VoiceSession:
         self.audio_queue = asyncio.Queue()
         self.audio_readers: dict[str, AudioReader] = {}
         self.reader_tasks: set[asyncio.Task] = set()
-        self.speech_pipeline = SpeechPipeline(queue=self.audio_queue)
+        self.conversation_pipeline = ConversationPipeline()
+        self.speech_pipeline = SpeechPipeline(queue=self.audio_queue, conversation_pipeline=self.conversation_pipeline)
 
     async def start(self) -> None:
 
