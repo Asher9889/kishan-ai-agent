@@ -10,6 +10,7 @@ from faster_whisper import WhisperModel
 from app.core.config import settings
 from app.core.logger import logger
 import numpy as np
+from scipy import signal
 
 
 class WhisperService:
@@ -68,6 +69,11 @@ class WhisperService:
 
         # Whisper expects values between -1.0 and 1.0
         audio /= 32768.0
+        
+           # Whisper works at 16kHz — resample from source rate (e.g. 48kHz)
+        if sample_rate != 16000:
+            audio = signal.resample_poly(audio, up=16000, down=sample_rate)
+
 
         segments, info = self.model.transcribe(
             audio,
