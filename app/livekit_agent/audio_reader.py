@@ -30,24 +30,6 @@ class AudioReader:
                     break 
                 # print(f"Audio frame received from {self.participant.identity}, size: {len(event.frame.data)}, bytes, Full Event is: {event}")
                 
-                
-                # frame = event.frame
-                
-                # print(type(frame.data))
-                # print(frame.data.format)
-                # print(frame.data.itemsize)
-                # print(frame.data.shape)
-
-                # pcm = np.asarray(frame.data)
-
-                # print(pcm.dtype)
-                # print(pcm.min())
-                # print(pcm.max())
-                # print(np.abs(pcm).mean())
-                
-                
-                # print(type(event.frame))
-                # print(event.frame)
                 await self.queue.put(event.frame) 
                 """
                 each frame contains:

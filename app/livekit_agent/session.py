@@ -29,6 +29,8 @@ class VoiceSession:
         await self.ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
         print(f"AI CONNECTED TO ROOM: {self.ctx.room.name}")
+        
+        await self.conversation_pipeline.start_tts()
 
         asyncio.create_task(
             self.speech_pipeline.start() # starts listening the audio.

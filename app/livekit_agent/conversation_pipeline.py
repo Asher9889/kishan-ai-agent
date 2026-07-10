@@ -4,6 +4,9 @@ from typing import Callable, Awaitable, Optional
 import json
 from typing import AsyncGenerator
 
+from app.livekit_agent.tts.sentence_buffer import SentenceBuffer
+from app.livekit_agent.tts.tts_pipeline import TTSPipeline
+
 class ConversationPipeline:
 
     def __init__(self, chat_id: str) -> None:
@@ -12,7 +15,8 @@ class ConversationPipeline:
             base_url="http://localhost:8000",
             timeout=30.0,
         )
-
+        self.sentence_buffer = SentenceBuffer()
+        self.tts_pipeline = TTSPipeline()
         self.conversation_id: str | None = chat_id
 
     async def process_pcm(self, pcm: array, sample_rate: int) -> None:
@@ -29,16 +33,31 @@ class ConversationPipeline:
         async for token in self.ask_llm(transcript, self.conversation_id):
 
             print(token, end="", flush=True)
+            
+            sentence = self.sentence_buffer.push(token)
+            
+            if sentence:
+                print("Sentence ready:", repr(sentence))
+                await self.tts_pipeline.enqueue(sentence)
+                
+        remaining = self.sentence_buffer.flush()
+        if remaining:
+            print(f"Remaining frame: {len(remaining)} bytes")
+            print("Remaining:", repr(remaining))
+            await self.tts_pipeline.enqueue(remaining)
 
-            # 1. Send token to UI
-            # await self.ui.send(token)
 
-            # 2. Feed token to TTS
+
+            # 1. Feed token to TTS
             # await self.tts.feed(token)
 
         # Tell TTS no more text is coming.
         # await self.tts.finish()
 
+    async def start_tts(self):
+        await self.tts_pipeline.start()
+    
+    
     async def transcribe(self, pcm: array, sample_rate: int) -> str | None:
 
         print(f"Sending {len(pcm)} PCM samples to Whisper")
@@ -68,8 +87,6 @@ class ConversationPipeline:
 
         return transcript
     
-    
-
     async def ask_llm(self, prompt: str, conversation_id: str) -> AsyncGenerator[str, None]:
 
         print(f"Sending prompt to LLM: {prompt} " f"(conversation_id: {conversation_id})")
@@ -122,9 +139,11 @@ class ConversationPipeline:
                     continue
 
                 if event_type == "chunk":
-                    print("Chunk event happens")
+                    # print("Chunk event happens")Chunk event happens
                     token = event["data"]["content"]
-                    print("token i am getting is", token)
+                    
+                    print(repr(token))
+                    # print("token i am getting is", token)
                     full_answer += token
 
                     # Stream to caller immediately
@@ -146,30 +165,6 @@ class ConversationPipeline:
                     print(full_answer)
 
                     break
-
-    
-    
-    # async def ask_llm(self, prompt: str, conversation_id: str) -> str:
-    #     print(f"Sending prompt to LLM: {prompt} (conversation_id: {conversation_id})")
-    #     response = await self.client.post("/v3/ask",
-    #         json={
-    #             "text": prompt,
-    #             "thread_id": conversation_id,
-    #             # "conversation_id": conversation_id,
-    #         },
-    #     )
-
-    #     response.raise_for_status()
-
-    #     payload = response.json()
-
-    #     print("LLM Response:", payload)
-
-    #     # Store conversation id for subsequent turns
-    #     self.conversation_id = payload["data"]["conversation_id"]
-
-    #     return payload["data"]["response"]
         
     async def close(self):
-
         await self.client.aclose()
