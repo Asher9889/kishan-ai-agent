@@ -2,14 +2,16 @@ import asyncio
 
 from app.livekit_agent.tts.tts_client import TTSClient
 from app.livekit_agent.tts.audio_chunker import AudioChunker
+from app.livekit_agent.tts.audio_publisher import AudioPublisher
 
 class TTSPipeline:
 
-    def __init__(self):
+    def __init__(self,  publisher: AudioPublisher):
         self.client = TTSClient()
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self.worker_task: asyncio.Task | None = None
         self.chunker = AudioChunker()
+        self.publisher = publisher
 
     async def start(self):
         if self.worker_task is None:

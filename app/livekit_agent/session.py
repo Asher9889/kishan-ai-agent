@@ -6,6 +6,7 @@ from livekit import rtc
 from livekit.agents import AutoSubscribe, JobContext
 
 from app.livekit_agent.audio_reader import AudioReader
+from app.livekit_agent.tts.audio_publisher import AudioPublisher
 
 
 class VoiceSession:
@@ -16,8 +17,10 @@ class VoiceSession:
         self.audio_queue = asyncio.Queue()
         self.audio_readers: dict[str, AudioReader] = {}
         self.reader_tasks: set[asyncio.Task] = set()
-        self.conversation_pipeline = ConversationPipeline(self.ctx.room.name)
+        self.conversation_pipeline = ConversationPipeline(chat_id= self.ctx.room.name, publisher=self.audio_publisher,)
         self.speech_pipeline = SpeechPipeline(queue=self.audio_queue, conversation_pipeline=self.conversation_pipeline)
+        self.audio_source = rtc.AudioSource(sample_rate=48000,num_channels=1)
+        self.audio_publisher = AudioPublisher(self.audio_source)
 
     async def start(self) -> None:
 
@@ -27,6 +30,9 @@ class VoiceSession:
         print("================================")
 
         await self.ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+        track = rtc.LocalAudioTrack.create_audio_track("assistant", self.audio_source)
+        await self.ctx.room.local_participant.publish_track(track)
+        # self.audio_publisher = AudioPublisher(self.audio_source)
 
         print(f"AI CONNECTED TO ROOM: {self.ctx.room.name}")
         
