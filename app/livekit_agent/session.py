@@ -17,10 +17,8 @@ class VoiceSession:
         self.audio_queue = asyncio.Queue()
         self.audio_readers: dict[str, AudioReader] = {}
         self.reader_tasks: set[asyncio.Task] = set()
-        self.conversation_pipeline = ConversationPipeline(chat_id= self.ctx.room.name, publisher=self.audio_publisher,)
+        self.conversation_pipeline = ConversationPipeline(chat_id=self.ctx.room.name)
         self.speech_pipeline = SpeechPipeline(queue=self.audio_queue, conversation_pipeline=self.conversation_pipeline)
-        self.audio_source = rtc.AudioSource(sample_rate=48000,num_channels=1)
-        self.audio_publisher = AudioPublisher(self.audio_source)
 
     async def start(self) -> None:
 
@@ -30,9 +28,13 @@ class VoiceSession:
         print("================================")
 
         await self.ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+
+        self.audio_source = rtc.AudioSource(sample_rate=48000, num_channels=1)
         track = rtc.LocalAudioTrack.create_audio_track("assistant", self.audio_source)
         await self.ctx.room.local_participant.publish_track(track)
-        # self.audio_publisher = AudioPublisher(self.audio_source)
+
+        self.audio_publisher = AudioPublisher(self.audio_source)
+        self.conversation_pipeline.tts_pipeline.set_publisher(self.audio_publisher)
 
         print(f"AI CONNECTED TO ROOM: {self.ctx.room.name}")
         

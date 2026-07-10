@@ -6,18 +6,17 @@ from typing import AsyncGenerator
 
 from app.livekit_agent.tts.sentence_buffer import SentenceBuffer
 from app.livekit_agent.tts.tts_pipeline import TTSPipeline
-from app.livekit_agent.tts.audio_publisher import AudioPublisher
 
 class ConversationPipeline:
 
-    def __init__(self, chat_id: str, publisher: AudioPublisher) -> None:   
+    def __init__(self, chat_id: str) -> None:   
 
         self.client = httpx.AsyncClient(
             base_url="http://localhost:8000",
             timeout=30.0,
         )
         self.sentence_buffer = SentenceBuffer()
-        self.tts_pipeline = TTSPipeline(publisher=publisher)
+        self.tts_pipeline = TTSPipeline()
         self.conversation_id: str | None = chat_id
 
     async def process_pcm(self, pcm: array, sample_rate: int) -> None:
