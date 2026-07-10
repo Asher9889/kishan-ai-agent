@@ -13,6 +13,11 @@ class TTSPipeline:
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self.worker_task: asyncio.Task | None = None
         self.chunker = AudioChunker()
+        self.resampler = rtc.AudioResampler(
+            input_rate=44100,
+            output_rate=48000,
+            num_channels=1,
+        )
         self._publisher: AudioPublisher | None = None
 
     def set_publisher(self, publisher: AudioPublisher) -> None:
@@ -40,13 +45,16 @@ class TTSPipeline:
             try:
                 async for pcm in self.client.stream(sentence):
                     for chunk in self.chunker.push(pcm):
-                        frame = rtc.AudioFrame(
-                            data=chunk,
-                            sample_rate=44100,
-                            num_channels=1,
-                            samples_per_channel=len(chunk) // 2,
-                        )
+                        for frame in self.resampler.push(bytearray(chunk)):
+                            await self._publish_frame(frame)
+
+                remaining = self.chunker.flush()
+                if remaining:
+                    for frame in self.resampler.push(bytearray(remaining)):
                         await self._publish_frame(frame)
+                for frame in self.resampler.flush():
+                    await self._publish_frame(frame)
+
             except Exception as exc:
                 print("TTS failed:", exc)
             finally:
