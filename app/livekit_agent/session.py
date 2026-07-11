@@ -20,6 +20,7 @@ class VoiceSession:
         self.conversation_pipeline = ConversationPipeline(chat_id=self.ctx.room.name)
         self.speech_pipeline = SpeechPipeline(queue=self.audio_queue, conversation_pipeline=self.conversation_pipeline)
 
+
     async def start(self) -> None:
 
         print("================================")
@@ -35,6 +36,9 @@ class VoiceSession:
 
         self.audio_publisher = AudioPublisher(self.audio_source)
         self.conversation_pipeline.tts_pipeline.set_publisher(self.audio_publisher)
+        
+        self.conversation_pipeline.tts_pipeline.on_started = self.speech_pipeline.pause
+        self.conversation_pipeline.tts_pipeline.on_finished = self.speech_pipeline.resume 
 
         print(f"AI CONNECTED TO ROOM: {self.ctx.room.name}")
         

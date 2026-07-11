@@ -33,6 +33,9 @@ class SileroVAD:
             audio_tensor,
             self.model,
             sampling_rate=sample_rate,
+            threshold=0.65,
+            min_speech_duration_ms=250,
+            # min_silence_duration_ms=500,
         )
 
         return len(speech) > 0 # return True or False based on Speach.

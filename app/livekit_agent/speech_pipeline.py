@@ -17,6 +17,7 @@ class SpeechPipeline:
 
     def __init__(self, queue: asyncio.Queue[rtc.AudioFrame], conversation_pipeline: ConversationPipeline):
         self.queue = queue
+        self.listening = True
         self.conversation_pipeline = conversation_pipeline
         # Stores AudioFrames temporarily
         # self.frames: list[rtc.AudioFrame] = []
@@ -36,6 +37,7 @@ class SpeechPipeline:
         self.frame_duration_ms = 10
         
         self.silence_frames = 0
+        self.speech_hits = 0
 
         
         self.client = httpx.AsyncClient(
@@ -79,6 +81,10 @@ class SpeechPipeline:
 
             # Wait for next 10 ms frame
             frame = await self.queue.get()
+            
+            # Ignore microphone while AI is speaking
+            if not self.listening:
+                continue
 
             # Buffer sizes
             vad_samples = int(frame.sample_rate * 0.3)       # 300 ms
@@ -122,8 +128,9 @@ class SpeechPipeline:
 
             # Speech detected
             if speech_detected:
+                self.speech_hits += 1
 
-                if not self.is_speaking:
+                if not self.is_speaking and self.speech_hits >= 2:
 
                     print("Speech started")
 
@@ -144,7 +151,7 @@ class SpeechPipeline:
             # Silence detected
             # ==========================================================
             else:
-
+                self.speech_hits = 0
                 if self.is_speaking:
 
                     # Keep trailing silence
@@ -163,136 +170,34 @@ class SpeechPipeline:
                         self.is_speaking = False
                         self.silence_frames = 0
 
-                        print(
-                            f"Sending {len(pcm_chunk)} PCM samples to Whisper"
-                        )
-
-                        # response = await self.client.post(
-                        #     "/transcribe-pcm",
-                        #     content=pcm_chunk.tobytes(),
-                        #     headers={
-                        #         "Content-Type": "application/octet-stream",
-                        #         "X-Sample-Rate": str(frame.sample_rate),
-                        #     },
-                        # )
-
-                        # print(response)
+                        print(f"Sending {len(pcm_chunk)} PCM samples to Whisper")
+                        
+                        duration_ms = (len(pcm_chunk) / frame.sample_rate) * 1000
+                        if duration_ms < 700:
+                            print(f"Ignoring short utterance: {duration_ms:.0f} ms")
+                            continue
+                        
                         await self.conversation_pipeline.process_pcm(pcm_chunk, frame.sample_rate)
-    # async def start(self):
-    #     print("SpeechPipeline started", id(self))
-    #     # print("Speech Pipeline Started")
-    #     self.running = True
-        
-    #     while self.running:
-
-    #         # Wait until AudioReader puts a frame
-    #         frame = await self.queue.get()
-            
-    #         vad_samples = int(frame.sample_rate * 0.3)
-            
-    #         self.vad_buffer.extend(frame.data)
-    #         self.pre_roll_buffer.extend(frame.data)
-    #         pre_roll_samples = int(frame.sample_rate * 0.3)
-            
-    #         if len(self.pre_roll_buffer) > pre_roll_samples:
-    #             del self.pre_roll_buffer[:-pre_roll_samples]
-
-    #         # Approximately 1 second
-    #         if len(self.vad_buffer) < vad_samples:
-    #             continue
-            
-    #         audio = np.array(
-    #             self.vad_buffer,
-    #             dtype=np.float32,
-    #         )
-            
-    #         audio /= 32768.0
-    #         audio = resample_poly(
-    #             audio,
-    #             up=16000,
-    #             down=48000,
-    #         )
-
-    #         speech_detected = self.vad.is_speech(
-    #             audio,
-    #             sample_rate=16000,
-    #         )
-            
-    #         # keep only latest 300 ms
-    #         if len(self.vad_buffer) > vad_samples:
-    #             del self.vad_buffer[:-vad_samples]
-
-            
-    #         print(speech_detected)
-    #         if speech_detected:
-    #             if not self.is_speaking:
-    #                 print("Speech started")
-    #                 self.is_speaking = True
-
-    #             self.silence_frames = 0
-
-    #             # Always keep the current frame
-    #             self.speech_buffer.extend(frame.data)
-    #         else:
-    #             if self.is_speaking:
-    #                 # Keep trailing silence
-    #                 self.speech_buffer.extend(frame.data)
-
-    #                 self.silence_frames += 1
-
-    #                 if self.silence_frames >= (self.silence_timeout_ms // self.frame_duration_ms):
-    #                     print("Speech ended")
-    #                     pcm_chunk = self.speech_buffer
-    #                     self.speech_buffer = array("h")
-    #                     self.is_speaking = False
-    #                     self.silence_frames = 0
-
-    #                     response = await self.client.post(
-    #                         "/transcribe-pcm",
-    #                         content=pcm_chunk.tobytes(),
-    #                         headers={
-    #                             "Content-Type": "application/octet-stream",
-    #                             "X-Sample-Rate": str(frame.sample_rate),
-    #                         },
-    #                     )
-
-    #                     print(await response.json())
     
-
-
-                # Hand the current chunk to Whisper
-                
-                # pcm_chunk = self.pcm_buffer
-                # self.pcm_buffer = array("h")  # replace the buffer with a new empty array for the next chunk
-                
-                # print(len(pcm_chunk), id(pcm_chunk), id(self.pcm_buffer))
-
-                # # Immediately start collecting the next chunk
-                # # self.pcm_buffer = array("h")
-
-                # print(f"Collected {len(pcm_chunk)} PCM samples")
-                
-                # response = await self.client.post(
-                #     "/transcribe-pcm",
-                #     content=pcm_chunk.tobytes(),
-                #     headers={
-                #         "Content-Type": "application/octet-stream",
-                #         "X-Sample-Rate": str(frame.sample_rate),
-                #     },
-                # )
-
-                # result = self.whisper.transcribe_pcm(
-                #     pcm_chunk,
-                #     sample_rate=frame.sample_rate,
-                # )
-
-                # print(response)
-
-
     async def stop(self):
         self.running = False
         self.pcm_buffer = array("h")
         print("Speech Pipeline Stopped")
+        
+    def pause(self):
+        print("SpeechPipeline paused")
+        self.listening = False
+        self.vad_buffer = array("h")
+        self.pre_roll_buffer = array("h")
+        self.speech_buffer = array("h")
+
+        self.is_speaking = False
+        self.silence_frames = 0
+
+    def resume(self):
+        print("SpeechPipeline resumed")
+        self.listening = True
+    
         
         
         

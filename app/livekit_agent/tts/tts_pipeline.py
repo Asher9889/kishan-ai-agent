@@ -19,6 +19,9 @@ class TTSPipeline:
             num_channels=1,
         )
         self._publisher: AudioPublisher | None = None
+        
+        self.on_started = None # for knowing when the TTS starts processing a sentence
+        self.on_finished = None # for knowing when the TTS finishes processing a sentence
 
     def set_publisher(self, publisher: AudioPublisher) -> None:
         self._publisher = publisher
@@ -41,6 +44,10 @@ class TTSPipeline:
     async def _worker(self):
         while True:
             sentence = await self.queue.get()
+            
+            if self.on_started:
+                self.on_started()
+                
             print(f"\nStarting TTS: {sentence}")
             try:
                 async for pcm in self.client.stream(sentence):
@@ -54,6 +61,11 @@ class TTSPipeline:
                         await self._publish_frame(frame)
                 for frame in self.resampler.flush():
                     await self._publish_frame(frame)
+                    
+                await self._publisher.wait_for_playout()
+
+                if self.on_finished:
+                    self.on_finished()
 
             except Exception as exc:
                 print("TTS failed:", exc)
