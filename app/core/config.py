@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings,SettingsConfigDict
 
 class Settings(BaseSettings):
+    HOST: str = "0.0.0.0"
     PORT: int = 8080
     LiveKit_AGENT_PORT: int = 9090
     APP_NAME: str
@@ -22,6 +23,8 @@ class Settings(BaseSettings):
     LIVEKIT_URL: str
     LIVEKIT_API_KEY: str
     LIVEKIT_API_SECRET: str
+    
+    LIVEKIT_AGENT_NAME: str
     
     model_config = SettingsConfigDict(
         env_file=".env",

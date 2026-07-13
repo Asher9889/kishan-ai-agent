@@ -15,15 +15,15 @@ def start_worker():
 
     cli.run_app(
         WorkerOptions(
-            agent_name="agri-ai-agent",
+            agent_name=settings.LIVEKIT_AGENT_NAME,
             entrypoint_fnc=entrypoint,
             worker_type=WorkerType.ROOM,
             ws_url=settings.LIVEKIT_URL,
             api_key=settings.LIVEKIT_API_KEY,
             api_secret=settings.LIVEKIT_API_SECRET,
             num_idle_processes=1,
-            host="0.0.0.0",
-            port=9091,
+            host=settings.HOST,
+            port=settings.LiveKit_AGENT_PORT,
         )
     )
 
