@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 
 import httpx
-from livekit.agents import llm, utils
+from livekit.agents import llm
 from livekit.agents._exceptions import (
     APIConnectionError,
     APITimeoutError,
     create_api_error_from_http,
 )
-from livekit.agents.types import NOT_GIVEN, NotGivenOr, APIConnectOptions
+from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, NotGivenOr, APIConnectOptions
 
 
 class CustomLLM(llm.LLM):
@@ -48,11 +47,16 @@ class CustomLLM(llm.LLM):
         self,
         *,
         chat_ctx: llm.ChatContext,
-        conn_options: APIConnectOptions = ...
+        tools: list[llm.Tool] | None = None,
+        conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
+        parallel_tool_calls: NotGivenOr[bool] = NOT_GIVEN,
+        tool_choice: NotGivenOr[llm.ToolChoice] = NOT_GIVEN,
+        extra_kwargs: NotGivenOr[dict[str, Any]] = NOT_GIVEN,
     ) -> llm.LLMStream:
         return CustomLLMStream(
             self,
             chat_ctx=chat_ctx,
+            tools=tools or [],
             conn_options=conn_options,
         )
 
@@ -66,12 +70,13 @@ class CustomLLMStream(llm.LLMStream):
         llm: CustomLLM,
         *,
         chat_ctx: llm.ChatContext,
+        tools: list[llm.Tool],
         conn_options: APIConnectOptions,
     ) -> None:
         super().__init__(
             llm=llm,
             chat_ctx=chat_ctx,
-            tools=[],
+            tools=tools,
             conn_options=conn_options,
         )
         self._llm: CustomLLM = llm

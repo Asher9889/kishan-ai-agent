@@ -73,16 +73,16 @@ class LiveKitAgentSession:
         # ── Event listeners ──
         @self._session.on("agent_state_changed")
         def _on_agent_state(ev):
-            print(f"[agent] {ev.state}")
+            print(f"[agent] {ev.new_state}")
 
         @self._session.on("user_state_changed")
         def _on_user_state(ev):
-            print(f"[user] {ev.state}")
+            print(f"[user] {ev.new_state}")
 
         @self._session.on("user_input_transcribed")
         def _on_transcribed(ev):
-            if ev.alternatives:
-                print(f"[stt] {ev.alternatives[0].text}")
+            if ev.transcript:
+                print(f"[stt] {ev.transcript}")
 
         # ── Start processing ──
         await self._session.start(agent=agent, room=room)
