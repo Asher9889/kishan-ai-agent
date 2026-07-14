@@ -1,12 +1,12 @@
 from app.core.config import settings
-from app.livekit_agent.session import VoiceSession
+from app.livekit_agent.agent_session import LiveKitAgentSession
 
 from livekit.agents import ( JobContext, WorkerOptions, WorkerType, AutoSubscribe, cli )
 
 
 async def entrypoint(ctx: JobContext):
 
-    session = VoiceSession(ctx)
+    session = LiveKitAgentSession(ctx)
 
     await session.start()
 

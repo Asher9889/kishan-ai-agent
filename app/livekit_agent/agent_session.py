@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+import asyncio
+
+from livekit import rtc
+from livekit.agents import Agent, AgentSession, AutoSubscribe, JobContext
+
+
+class LiveKitAgentSession:
+    """New session powered by livekit.agents.AgentSession + Agent.
+
+    All three adapters wired:
+      - STT:  WhisperSTT   → POST /transcribe-pcm
+      - LLM:  CustomLLM    → POST /v3/ask  (SSE)
+      - TTS:  ExternalTTS  → POST /v1/tts/stream
+    """
+
+    def __init__(self, ctx: JobContext) -> None:
+        self.ctx = ctx
+        self._session: AgentSession | None = None
+
+    async def start(self) -> None:
+        await self.ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+        room = self.ctx.room
+
+        # ── Local audio source (agent speaks through this) ──
+        audio_source = rtc.AudioSource(sample_rate=24000, num_channels=1)
+        track = rtc.LocalAudioTrack.create_audio_track("assistant", audio_source)
+        await room.local_participant.publish_track(track)
+
+        # ── STT (Phase 1) ──
+        from app.livekit_agent.adapters.whisper_stt import WhisperSTT
+
+        stt = WhisperSTT()
+
+        # ── LLM (Phase 2) ──
+        from app.livekit_agent.adapters.custom_llm import CustomLLM
+
+        llm = CustomLLM()
+        llm.thread_id = room.name
+
+        # ── TTS (Phase 3) ──
+        from app.livekit_agent.adapters.external_tts import ExternalTTS
+
+        tts = ExternalTTS()
+
+        # ── Agent definition ──
+        # instructions only used if a native LLM is plugged in;
+        # our CustomLLM delegates to /v3/ask which manages its own system prompt.
+        agent = Agent(
+            instructions="",
+        )
+
+        # ── AgentSession (orchestrator) ──
+        self._session = AgentSession(
+            stt=stt,
+            llm=llm,
+            tts=tts,
+            turn_handling={
+                "turn_detection": "vad",
+                "endpointing": {
+                    "mode": "dynamic",
+                    "min_delay": 0.5,
+                    "max_delay": 3.0,
+                },
+                "interruption": {
+                    "enabled": True,
+                    "mode": "vad",
+                },
+            },
+        )
+
+        # ── Event listeners ──
+        @self._session.on("agent_state_changed")
+        def _on_agent_state(ev):
+            print(f"[agent] {ev.state}")
+
+        @self._session.on("user_state_changed")
+        def _on_user_state(ev):
+            print(f"[user] {ev.state}")
+
+        @self._session.on("user_input_transcribed")
+        def _on_transcribed(ev):
+            if ev.alternatives:
+                print(f"[stt] {ev.alternatives[0].text}")
+
+        # ── Start processing ──
+        await self._session.start(agent=agent, room=room)
+
+        # ── Keep alive until room closes ──
+        await asyncio.Future()
+
+    async def aclose(self) -> None:
+        if self._session is not None:
+            await self._session.aclose()
