@@ -69,18 +69,46 @@ class LiveKitAgentSession:
             }
         )
 
-        # ── Event listeners ──
+        # ── Sync agent state to participant attributes (client reads these) ──
+        async def _update_attr(key: str, value: str) -> None:
+            try:
+                await room.local_participant.set_attributes({key: value})
+            except Exception:
+                pass
+
+
+        @self._session.on("agent_turn_started")
+        def _on_agent_turn_started(ev):
+            asyncio.create_task(_update_attr("lk.agent_turn", "started"))
+            print("[agent] turn started")
+        # Flag so the welcome chime only plays once per session
+        _welcome_sent = False
+
         @self._session.on("agent_state_changed")
         def _on_agent_state(ev):
+            nonlocal _welcome_sent
+            asyncio.create_task(_update_attr("lk.agent_state", ev.new_state))
+            if ev.new_state == "listening" and not _welcome_sent:
+                _welcome_sent = True
+                # ── Option A: signal client to play a chime ──
+                asyncio.create_task(
+                    _update_attr("lk.agent_ready", "true")
+                )
+                # ── Option B: agent speaks a welcome message ──
+                self._session.say("Welcome, how can I help you?")
             print(f"[agent] {ev.new_state}")
 
         @self._session.on("user_state_changed")
         def _on_user_state(ev):
+            asyncio.create_task(_update_attr("lk.user_state", ev.new_state))
             print(f"[user] {ev.new_state}")
 
         @self._session.on("user_input_transcribed")
         def _on_transcribed(ev):
             if ev.transcript:
+                asyncio.create_task(
+                    _update_attr("lk.user_transcript", ev.transcript)
+                )
                 print(f"[stt] {ev.transcript}")
 
         # ── Start processing ──
