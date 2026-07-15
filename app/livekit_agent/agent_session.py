@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from livekit import rtc
-from livekit.agents import Agent, AgentSession, AutoSubscribe, JobContext
+from livekit.agents import Agent, AgentSession,inference, AutoSubscribe, JobContext, TurnHandlingOptions
 
 
 class LiveKitAgentSession:
@@ -22,11 +22,6 @@ class LiveKitAgentSession:
     async def start(self) -> None:
         await self.ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
         room = self.ctx.room
-
-        # ── Local audio source (agent speaks through this) ──
-        audio_source = rtc.AudioSource(sample_rate=24000, num_channels=1)
-        track = rtc.LocalAudioTrack.create_audio_track("assistant", audio_source)
-        await room.local_participant.publish_track(track)
 
         # ── STT (Phase 1) ──
         from app.livekit_agent.adapters.whisper_stt import WhisperSTT
@@ -57,17 +52,21 @@ class LiveKitAgentSession:
             llm=llm,
             tts=tts,
             turn_handling={
-                "turn_detection": "vad",
+                "turn_detection": inference.TurnDetector(version="v1-mini"),
+                # "turn_detection": "vad",
                 "endpointing": {
                     "mode": "dynamic",
-                    "min_delay": 0.5,
+                    "min_delay": 1.0,
                     "max_delay": 3.0,
                 },
                 "interruption": {
                     "enabled": True,
-                    "mode": "vad",
+                    "mode": "adaptive",
                 },
-            },
+                "preemptive_generation": {
+                    "enabled": False,
+                },
+            }
         )
 
         # ── Event listeners ──
