@@ -82,16 +82,18 @@ class WhisperService:
             vad_filter=False,  # Disable VAD filtering for PCM input
         )
 
+        segment_list = list(segments)
         transcript = " ".join(
-            segment.text.strip()
-            for segment in segments
-            if segment.text.strip()
+            seg.text.strip()
+            for seg in segment_list
+            if seg.text.strip()
         ).strip()
 
-        confidence = round(
-            float(info.language_probability),
-            4,
-        )
+        if segment_list:
+            avg_lp = sum(seg.avg_logprob for seg in segment_list) / len(segment_list)
+            confidence = round(float(np.exp(avg_lp)), 4)
+        else:
+            confidence = 0.0
 
         logger.info(
             "PCM transcription completed",
