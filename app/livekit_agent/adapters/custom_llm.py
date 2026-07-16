@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import httpx
-from livekit.agents import llm
+from livekit.agents import llm, utils
 from livekit.agents._exceptions import (
     APIConnectionError,
     APITimeoutError,
     create_api_error_from_http,
 )
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, NotGivenOr, APIConnectOptions
+
+logger = logging.getLogger(__name__)
 
 
 class CustomLLM(llm.LLM):
@@ -146,7 +149,7 @@ class CustomLLMStream(llm.LLMStream):
                         if token:
                             self._event_ch.send_nowait(
                                 llm.ChatChunk(
-                                    id="",
+                                    id=utils.shortuuid("llm_"),
                                     delta=llm.ChoiceDelta(content=token),
                                 )
                             )

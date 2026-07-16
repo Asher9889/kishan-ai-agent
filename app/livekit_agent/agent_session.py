@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from livekit import rtc
-from livekit.agents import Agent, AgentSession,inference, AutoSubscribe, JobContext, TurnHandlingOptions
+from livekit.agents import Agent, AgentSession, inference, AutoSubscribe, JobContext, TurnHandlingOptions
+from livekit.agents.voice.room_io import AudioInputOptions, RoomOptions
+
+logger = logging.getLogger(__name__)
 
 
 class LiveKitAgentSession:
@@ -24,6 +28,8 @@ class LiveKitAgentSession:
         room = self.ctx.room
 
         # ── STT (Phase 1) ──
+        # Pass raw WhisperSTT — AgentSession's Agent.default.stt_node()
+        # auto-wraps non-streaming STT with StreamAdapter + VAD.
         from app.livekit_agent.adapters.whisper_stt import WhisperSTT
 
         stt = WhisperSTT()
@@ -51,36 +57,34 @@ class LiveKitAgentSession:
             stt=stt,
             llm=llm,
             tts=tts,
-            turn_handling={
-                "turn_detection": inference.TurnDetector(version="v1-mini"),
-                # "turn_detection": "vad",
-                "endpointing": {
+            aec_warmup_duration=5.0,
+            turn_handling=TurnHandlingOptions(
+                turn_detection=inference.TurnDetector(
+                    version="v1-mini",
+                    unlikely_threshold=0.7,
+                ),
+                endpointing={
                     "mode": "dynamic",
-                    "min_delay": 1.0,
-                    "max_delay": 3.0,
+                    "min_delay": 0.3,
+                    "max_delay": 2.5,
                 },
-                "interruption": {
+                interruption={
                     "enabled": True,
                     "mode": "adaptive",
                 },
-                "preemptive_generation": {
+                preemptive_generation={
                     "enabled": False,
                 },
-            }
+            ),
         )
 
         # ── Sync agent state to participant attributes (client reads these) ──
         async def _update_attr(key: str, value: str) -> None:
             try:
                 await room.local_participant.set_attributes({key: value})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to set attribute %s: %s", key, e)
 
-
-        @self._session.on("agent_turn_started")
-        def _on_agent_turn_started(ev):
-            asyncio.create_task(_update_attr("lk.agent_turn", "started"))
-            print("[agent] turn started")
         # Flag so the welcome chime only plays once per session
         _welcome_sent = False
 
@@ -88,20 +92,20 @@ class LiveKitAgentSession:
         def _on_agent_state(ev):
             nonlocal _welcome_sent
             asyncio.create_task(_update_attr("lk.agent_state", ev.new_state))
+            if ev.new_state == "speaking":
+                asyncio.create_task(_update_attr("lk.agent_turn", "started"))
+                logger.debug("[agent] turn started")
             if ev.new_state == "listening" and not _welcome_sent:
                 _welcome_sent = True
-                # ── Option A: signal client to play a chime ──
                 asyncio.create_task(
                     _update_attr("lk.agent_ready", "true")
                 )
-                # ── Option B: agent speaks a welcome message ──
-                self._session.say("Welcome, how can I help you?")
-            print(f"[agent] {ev.new_state}")
+            logger.info("[agent] %s", ev.new_state)
 
         @self._session.on("user_state_changed")
         def _on_user_state(ev):
             asyncio.create_task(_update_attr("lk.user_state", ev.new_state))
-            print(f"[user] {ev.new_state}")
+            logger.info("[user] %s", ev.new_state)
 
         @self._session.on("user_input_transcribed")
         def _on_transcribed(ev):
@@ -109,10 +113,22 @@ class LiveKitAgentSession:
                 asyncio.create_task(
                     _update_attr("lk.user_transcript", ev.transcript)
                 )
-                print(f"[stt] {ev.transcript}")
+                logger.info("[stt] %s", ev.transcript)
 
         # ── Start processing ──
-        await self._session.start(agent=agent, room=room)
+        await self._session.start(
+            agent=agent,
+            room=room,
+            room_options=RoomOptions(
+                audio_input=AudioInputOptions(
+                    sample_rate=24000,
+                    num_channels=1,
+                    # Install a noise cancellation plugin (e.g. livekit-plugins-ai-coustics)
+                    # and uncomment the line below to enable AEC/noise suppression:
+                    # noise_cancellation=...,
+                ),
+            ),
+        )
 
         # ── Keep alive until room closes ──
         await asyncio.Future()

@@ -118,3 +118,4 @@ class ExternalTTSChunkedStream(tts.ChunkedStream):
             ) from e
 
         output_emitter.flush()
+        output_emitter.end_input()

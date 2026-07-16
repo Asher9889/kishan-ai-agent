@@ -8,8 +8,6 @@ from livekit.agents._exceptions import (
     APITimeoutError,
     create_api_error_from_http,
 )
-from livekit.agents.inference import VAD
-from livekit.agents.stt import StreamAdapter
 from livekit.agents.types import NOT_GIVEN, NotGivenOr, APIConnectOptions
 
 
@@ -48,7 +46,8 @@ class WhisperSTT(stt.STT):
         frames = [buffer] if isinstance(buffer, rtc.AudioFrame) else buffer
         if not frames:
             return stt.SpeechEvent(
-                type=stt.SpeechEventType.RECOGNITION_USAGE,
+                type=stt.SpeechEventType.FINAL_TRANSCRIPT,
+                request_id=utils.shortuuid("stt_"),
                 alternatives=[],
             )
 
@@ -101,7 +100,8 @@ class WhisperSTT(stt.STT):
 
         if not transcript:
             return stt.SpeechEvent(
-                type=stt.SpeechEventType.RECOGNITION_USAGE,
+                type=stt.SpeechEventType.FINAL_TRANSCRIPT,
+                request_id=utils.shortuuid("stt_"),
                 alternatives=[],
             )
 
@@ -116,21 +116,9 @@ class WhisperSTT(stt.STT):
 
         return stt.SpeechEvent(
             type=stt.SpeechEventType.FINAL_TRANSCRIPT,
+            request_id=utils.shortuuid("stt_"),
             alternatives=[speech_data],
         )
 
     async def aclose(self) -> None:
         await self._client.aclose()
-
-
-def create_whisper_stt(
-    *,
-    endpoint_url: str = "http://localhost:8000/transcribe-pcm",
-    http_timeout: float = 30.0,
-) -> StreamAdapter:
-    whisper = WhisperSTT(
-        endpoint_url=endpoint_url,
-        http_timeout=http_timeout,
-    )
-    vad = VAD()
-    return StreamAdapter(stt=whisper, vad=vad)
