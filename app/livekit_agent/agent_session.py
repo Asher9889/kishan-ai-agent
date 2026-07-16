@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+# import logging
 
 from livekit import rtc
-from livekit.agents import Agent, AgentSession, inference, AutoSubscribe, JobContext, TurnHandlingOptions
+from livekit.agents import  room_io,Agent, AgentSession, inference, AutoSubscribe, JobContext, TurnHandlingOptions
 from livekit.agents.voice.room_io import AudioInputOptions, RoomOptions
-
-logger = logging.getLogger(__name__)
+from livekit.plugins import dtln
+# logger = logging.getLogger(__name__)
 
 
 class LiveKitAgentSession:
@@ -57,15 +57,15 @@ class LiveKitAgentSession:
             stt=stt,
             llm=llm,
             tts=tts,
-            aec_warmup_duration=5.0,
+            # aec_warmup_duration=5.0,
             turn_handling=TurnHandlingOptions(
                 turn_detection=inference.TurnDetector(
                     version="v1-mini",
-                    unlikely_threshold=0.7,
+                    # unlikely_threshold=0.7,
                 ),
                 endpointing={
                     "mode": "dynamic",
-                    "min_delay": 0.3,
+                    "min_delay": 0.7,
                     "max_delay": 2.5,
                 },
                 interruption={
@@ -83,7 +83,8 @@ class LiveKitAgentSession:
             try:
                 await room.local_participant.set_attributes({key: value})
             except Exception as e:
-                logger.warning("Failed to set attribute %s: %s", key, e)
+                
+                print("Failed to set attribute %s: %s", key, e)
 
         # Flag so the welcome chime only plays once per session
         _welcome_sent = False
@@ -94,18 +95,18 @@ class LiveKitAgentSession:
             asyncio.create_task(_update_attr("lk.agent_state", ev.new_state))
             if ev.new_state == "speaking":
                 asyncio.create_task(_update_attr("lk.agent_turn", "started"))
-                logger.debug("[agent] turn started")
+                print("[agent] turn started")
             if ev.new_state == "listening" and not _welcome_sent:
                 _welcome_sent = True
                 asyncio.create_task(
                     _update_attr("lk.agent_ready", "true")
                 )
-            logger.info("[agent] %s", ev.new_state)
+            print("[agent] %s", ev.new_state)
 
         @self._session.on("user_state_changed")
         def _on_user_state(ev):
             asyncio.create_task(_update_attr("lk.user_state", ev.new_state))
-            logger.info("[user] %s", ev.new_state)
+            print("[user] %s", ev.new_state)
 
         @self._session.on("user_input_transcribed")
         def _on_transcribed(ev):
@@ -113,19 +114,25 @@ class LiveKitAgentSession:
                 asyncio.create_task(
                     _update_attr("lk.user_transcript", ev.transcript)
                 )
-                logger.info("[stt] %s", ev.transcript)
+                print("[stt] %s", ev.transcript)
 
         # ── Start processing ──
         await self._session.start(
             agent=agent,
             room=room,
-            room_options=RoomOptions(
-                audio_input=AudioInputOptions(
-                    sample_rate=24000,
-                    num_channels=1,
-                    # Install a noise cancellation plugin (e.g. livekit-plugins-ai-coustics)
-                    # and uncomment the line below to enable AEC/noise suppression:
-                    # noise_cancellation=...,
+            # room_options=RoomOptions(
+            #     audio_input=AudioInputOptions(
+            #         sample_rate=24000,
+            #         num_channels=1,
+            #         # Install a noise cancellation plugin (e.g. livekit-plugins-ai-coustics)
+            #         # and uncomment the line below to enable AEC/noise suppression:
+            #         # noise_cancellation=...,
+            #     ),
+            # ),
+            
+            room_options=room_io.RoomOptions(
+                audio_input=room_io.AudioInputOptions(
+                    noise_cancellation=dtln.noise_suppression(),
                 ),
             ),
         )
