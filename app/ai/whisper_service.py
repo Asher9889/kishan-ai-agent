@@ -78,8 +78,8 @@ class WhisperService:
         segments, info = self.model.transcribe(
             audio,
             language="hi",
-            beam_size=5,
-            vad_filter=False,  # Disable VAD filtering for PCM input
+            beam_size=10, # quality vs speed trade-off
+            vad_filter=True,  # Disable VAD filtering for PCM input
         )
 
         segment_list = list(segments)
