@@ -57,6 +57,8 @@ class WhisperSTT(stt.STT):
             if hasattr(merged.data, "tobytes")
             else bytes(merged.data)
         )
+        
+        print("merged sample rate:", merged.sample_rate)
 
         headers = {
             "X-Sample-Rate": str(merged.sample_rate),

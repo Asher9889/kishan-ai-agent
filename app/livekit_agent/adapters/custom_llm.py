@@ -20,7 +20,7 @@ class CustomLLM(llm.LLM):
     def __init__(
         self,
         *,
-        endpoint_url: str = "http://localhost:8000/v3/ask",
+        endpoint_url: str = "http://localhost:8000/v4/ask",
         http_timeout: float = 60.0,
         thread_id: str | None = None,
     ) -> None:

@@ -133,6 +133,7 @@ class LiveKitAgentSession:
             room_options=room_io.RoomOptions(
                 audio_input=room_io.AudioInputOptions(
                     noise_cancellation=dtln.noise_suppression(),
+                    sample_rate=48000,
                 ),
             ),
         )
