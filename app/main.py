@@ -56,7 +56,7 @@ from app.api.ask_image_followup import (
 from app.livekit_agent.runner import (
     start_livekit_process
 )
-
+from app.api.ask_v4 import (router as ask_v4_router)
 
 livekit_process=None
 
@@ -99,6 +99,8 @@ app.include_router(quick_knowledge_router)
 app.include_router(ask_v3_router)
 app.include_router(ask_image_router)
 app.include_router(ask_image_followup_router)
+app.include_router(ask_v4_router)
+
 
 @app.on_event("startup")
 async def startup_event() -> None:

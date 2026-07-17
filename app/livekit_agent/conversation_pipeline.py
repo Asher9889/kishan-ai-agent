@@ -93,7 +93,7 @@ class ConversationPipeline:
 
         full_answer = ""
 
-        async with self.client.stream("POST", "/v3/ask",
+        async with self.client.stream("POST", "/v4/ask",
             json={
                 "thread_id": conversation_id,
                 "text": prompt,
