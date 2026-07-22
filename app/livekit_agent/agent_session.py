@@ -61,7 +61,7 @@ class LiveKitAgentSession:
             turn_handling=TurnHandlingOptions(
                 turn_detection=inference.TurnDetector(
                     version="v1-mini",
-                    # unlikely_threshold=0.7,
+                    unlikely_threshold=0.7,
                 ),
                 endpointing={
                     "mode": "dynamic",

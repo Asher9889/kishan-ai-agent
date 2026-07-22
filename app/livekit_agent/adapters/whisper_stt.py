@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import httpx
+import wave
+import os
+from datetime import datetime
 from livekit import rtc
 from livekit.agents import stt, utils
 from livekit.agents._exceptions import (
@@ -9,6 +12,9 @@ from livekit.agents._exceptions import (
     create_api_error_from_http,
 )
 from livekit.agents.types import NOT_GIVEN, NotGivenOr, APIConnectOptions
+from app.core.config import settings
+
+AUDIO_DUMP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "audio_dumps")
 
 
 class WhisperSTT(stt.STT):
@@ -57,8 +63,9 @@ class WhisperSTT(stt.STT):
             if hasattr(merged.data, "tobytes")
             else bytes(merged.data)
         )
-        
-        print("merged sample rate:", merged.sample_rate)
+
+        if settings.WHISPER_AUDIO_DUMP:
+            self._save_audio_dump(pcm_bytes, merged.sample_rate)
 
         headers = {
             "X-Sample-Rate": str(merged.sample_rate),
@@ -121,6 +128,24 @@ class WhisperSTT(stt.STT):
             request_id=utils.shortuuid("stt_"),
             alternatives=[speech_data],
         )
+
+    def _save_audio_dump(self, pcm_bytes: bytes, sample_rate: int) -> None:
+        try:
+            os.makedirs(AUDIO_DUMP_DIR, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            filename = f"whisper_input_{timestamp}.wav"
+            filepath = os.path.join(AUDIO_DUMP_DIR, filename)
+
+            with wave.open(filepath, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+                wf.writeframes(pcm_bytes)
+
+            duration = len(pcm_bytes) / (2 * sample_rate)
+            print(f"[AudioDump] Saved {filepath} ({duration:.2f}s, {sample_rate}Hz)")
+        except Exception as e:
+            print(f"[AudioDump] Failed to save audio: {e}")
 
     async def aclose(self) -> None:
         await self._client.aclose()

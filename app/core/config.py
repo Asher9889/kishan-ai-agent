@@ -25,7 +25,10 @@ class Settings(BaseSettings):
     LIVEKIT_API_SECRET: str
     
     LIVEKIT_AGENT_NAME: str
-    
+
+    # Audio debugging: set to true to save raw PCM before Whisper transcription
+    WHISPER_AUDIO_DUMP: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore"
